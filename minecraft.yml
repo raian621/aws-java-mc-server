@@ -1,0 +1,85 @@
+---
+- name: Install dependencies
+  hosts: ec2_minecraft_server
+  become: true
+  tasks:
+    - name: Download Java rpms manually (yum was NOT working)
+      get_url:
+        url: https://corretto.aws/downloads/resources/21.0.4.7.1/java-21-amazon-corretto-devel-21.0.4.7-1.x86_64.rpm
+        checksum: md5:30972c7cd1bc844b54840348b7a089f5
+        dest: /tmp
+
+    - name: Install dependencies
+      command: yum localinstall /tmp/java-21-amazon-corretto*.rpm -y
+
+    - name: Add minecraft group
+      group:
+        name: minecraft
+
+    - name: Add minecraft user
+      user:
+        name: minecraft
+        comment: minecraft machine account
+        groups: minecraft
+
+    - name: Make Minecraft server directory
+      file:
+        path: /opt/minecraft/server
+        state: directory
+        owner: minecraft
+        group: minecraft
+        mode: '0750'
+      
+    - name: Download Minecraft server jar
+      vars:
+        url: "{{ lookup('ansible.builtin.env', 'MINECRAFT_SERVER_JAR_URL')|default('https://piston-data.mojang.com/v1/objects/59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar', True) }}"
+      get_url:
+        url: "{{ url }}"
+        dest: /opt/minecraft/server/server.jar
+        owner: minecraft
+        group: minecraft
+        mode: '0750'
+
+    - name: Create Minecraft server start up script
+      copy:
+        dest: /opt/minecraft/server/start
+        owner: minecraft
+        group: minecraft
+        mode: '0750'
+        content: |
+          #!/bin/env bash
+          java -Xmx512M -Xms512M -jar server.jar nogui 
+
+    - name: Automatically agree to EULA
+      copy:
+        dest: /opt/minecraft/server/eula.txt
+        owner: minecraft
+        group: minecraft
+        mode: '0740'
+        content: "eula=TRUE\n"
+
+    - name: Create Minecraft service
+      copy:
+        dest: /etc/systemd/system/minecraft.service
+        content: |
+          [Unit]
+          Description=Java Minecraft Server service
+          Wants=network-online.target
+
+          [Service]
+          WorkingDirectory=/opt/minecraft/server
+          ExecStart=/opt/minecraft/server/start
+          StandardInput=null
+          StandardOutput=syslog
+          StandardError=syslog
+          SyslogIdentifier=java-minecraft
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable Minecraft service
+      systemd:
+        name: minecraft.service
+        state: started
+        enabled: true
+

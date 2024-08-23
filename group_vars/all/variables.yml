@@ -1,0 +1,4 @@
+---
+server_host: "{{lookup('ansible.builtin.env', 'SERVER_HOST')}}"
+server_user: "{{lookup('ansible.builtin.env', 'SERVER_USER')}}"
+server_ssh_key: "{{lookup('ansible.builtin.env', 'SERVER_SSH_KEY')}}"
